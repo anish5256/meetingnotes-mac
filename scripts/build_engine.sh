@@ -53,9 +53,19 @@ printf '%s\n' "${version:-unknown}" > "$engine/app/ENGINE_VERSION"
 ffmpeg="$("$python" -c 'import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())')"
 cp "$ffmpeg" "$engine/bin/ffmpeg"
 chmod +x "$engine/bin/ffmpeg"
+# pip's helper commands (tqdm, f2py, …) embed this build machine's path in their first line and are never
+# run by the app; keep only the python interpreter files.
+find "$engine/python/bin" -maxdepth 1 ! -type d ! -name 'python*' -delete   # files and their symlinks
 "$python" -m pip cache purge 2>/dev/null || true
 find "$engine/python" -type d -name site-packages -print0 | while IFS= read -r -d '' site; do
     find "$site" -type d -name tests -prune -exec rm -rf {} +
 done
 "$python" -I -c "import mlx_whisper, sherpa_onnx, scipy, soundfile, anthropic, imageio_ffmpeg"
+# Compiled caches embed this machine's paths; the app writes its own to ~/Library/Caches instead.
+find "$engine" -name __pycache__ -type d -prune -exec rm -rf {} +
+# Ship the stdlib pre-compiled in "unchecked-hash" mode (never revalidated or rewritten) with neutral paths:
+# helper processes (e.g. multiprocessing's resource tracker) don't inherit -X pycache_prefix and would
+# otherwise write __pycache__ into the signed bundle.
+"$python" -B -m compileall -q -f -j 0 --invalidation-mode unchecked-hash -s "$engine/python" -p /engine/python \
+    -x '(site-packages|/test/|/tests/|idlelib|lib2to3|tkinter|turtledemo)' "$engine/python/lib/python3.12" >/dev/null || true
 du -sh "$engine"/*

@@ -17,7 +17,7 @@ enum LiveWatcher {
             return
         }
         process.executableURL = engine.python
-        process.arguments = ["-I", engine.scriptsDir.appendingPathComponent("live_transcribe.py").path, "watch", session.path]
+        process.arguments = engine.pythonFlags + [engine.scriptsDir.appendingPathComponent("live_transcribe.py").path, "watch", session.path]
         process.currentDirectoryURL = engine.cwd
         process.environment = engine.environment(merging: ChildEnvironment.standard)
         let pipe = Pipe()

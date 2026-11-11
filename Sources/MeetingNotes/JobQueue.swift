@@ -173,7 +173,7 @@ final class JobQueue: ObservableObject {
         process.currentDirectoryURL = engine.cwd
         // Part C accepts --live-session without an AUDIO positional.
         let input = job.live ? ["--live-session", job.file.path] : [job.file.path]
-        let args = ["-I", engine.scriptsDir.appendingPathComponent("summarize.py").path] + input + [
+        let args = engine.pythonFlags + [engine.scriptsDir.appendingPathComponent("summarize.py").path] + input + [
                     "--meetings-dir", Paths.url(job.settings.meetings).path,
                     "--summary-backend", job.settings.summaryProvider,
                     "--summary-model", job.settings.summaryModel,

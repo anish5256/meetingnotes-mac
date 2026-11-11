@@ -2,11 +2,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export CLANG_MODULE_CACHE_PATH="$PWD/.build/mcache"
-swift build -c release --cache-path .build/cache --config-path .build/config --security-path .build/security
-bin_dir="$(swift build -c release --cache-path .build/cache --config-path .build/config --security-path .build/security --show-bin-path)"
+# Relative source paths in the binary (no build-machine paths in the shipped app).
+swift build -c release --cache-path .build/cache --config-path .build/config --security-path .build/security -Xswiftc -file-prefix-map -Xswiftc "$PWD=."
+bin_dir="$(swift build -c release --cache-path .build/cache --config-path .build/config --security-path .build/security -Xswiftc -file-prefix-map -Xswiftc "$PWD=." --show-bin-path)"
 app="$PWD/build/MeetingNotes.app"
 mkdir -p "$app/Contents/MacOS"
 cp "$bin_dir/MeetingNotes" "$app/Contents/MacOS/MeetingNotes"
+# Drop debug symbols: they record this machine's build paths and aren't needed to run.
+strip -S -x "$app/Contents/MacOS/MeetingNotes"
 cp Info.plist "$app/Contents/Info.plist"
 mkdir -p "$app/Contents/Resources"
 cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"

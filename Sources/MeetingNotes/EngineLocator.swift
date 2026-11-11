@@ -11,6 +11,14 @@ struct EngineLayout: Sendable {
         guard let ffmpeg else { return [:] }
         return ["MEETINGNOTES_FFMPEG": ffmpeg.path, "PATH": ffmpeg.deletingLastPathComponent().path]
     }
+    /// Interpreter flags. `-I` ignores PYTHON* env vars, so the cache location must be a `-X` option:
+    /// the built-in engine must never write __pycache__ into the signed app bundle.
+    var pythonFlags: [String] {
+        guard isBuiltIn else { return ["-I"] }
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MeetingNotes/pycache")
+        return ["-I", "-X", "pycache_prefix=" + cache.path]
+    }
 
     func environment(merging base: [String: String]) -> [String: String] {
         var result = base

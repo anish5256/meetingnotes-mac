@@ -3,6 +3,7 @@ import AppKit
 
 struct JobSettings: Sendable {
     let repo: String
+    var useDeveloperEngine = false
     let meetings: String
     let summaryProvider: String
     let summaryModel: String
@@ -22,6 +23,7 @@ struct SettingsView: View {
     @AppStorage("correctProvider") private var correctProvider = "none"
     @AppStorage("correctModel") private var correctModel = ""
     @AppStorage("anthropicKey") private var anthropicKey = ""
+    @AppStorage("useDeveloperEngine") private var useDeveloperEngine = false
     @AppStorage("repoPath") private var repo = "~/voice-memo-transcriber"
     @AppStorage("meetingsPath") private var meetings = "~/Meetings"
     @AppStorage("proxyURL") private var proxyURL = "http://127.0.0.1:8317/v1"
@@ -78,11 +80,14 @@ struct SettingsView: View {
                     }
                 }
                 Section {
-                    TextField("Repository path", text: $repo)
+                    Text("Transcription engine: " + engineDescription)
+                        .textSelection(.enabled)
+                    Toggle("Use developer engine", isOn: $useDeveloperEngine)
+                    if useDeveloperEngine {
+                        TextField("Repository path", text: $repo)
+                    }
                 } header: {
-                    Text("Repository")
-                } footer: {
-                    Text("The folder containing summarize.py and venv.")
+                    Text("Transcription engine")
                 }
             }
             .tabItem { Label("General", systemImage: "gearshape") }
@@ -122,6 +127,13 @@ struct SettingsView: View {
         .frame(width: 520, height: 460)
     }
 
+    private var engineDescription: String {
+        do {
+            return try EngineLocator.resolve(repoPath: repo, useDeveloperEngine: useDeveloperEngine,
+                                             resourcesURL: Bundle.main.resourceURL).description
+        } catch { return error.localizedDescription }
+    }
+
     private func chooseMeetingsFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -154,6 +166,7 @@ struct SettingsView: View {
         let d = UserDefaults.standard
         return JobSettings(
             repo: d.string(forKey: "repoPath") ?? "~/voice-memo-transcriber",
+            useDeveloperEngine: d.bool(forKey: "useDeveloperEngine"),
             meetings: d.string(forKey: "meetingsPath") ?? "~/Meetings",
             summaryProvider: d.string(forKey: "summaryProvider") ?? "codex",
             summaryModel: d.string(forKey: "summaryModel") ?? "",

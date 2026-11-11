@@ -8,11 +8,18 @@ enum LiveWatcher {
                     text: @escaping @Sendable (String) async -> Void,
                     notice: @escaping @Sendable (String) async -> Void) async {
         let process = Process()
-        let repo = Paths.url(settings.repo)
-        process.executableURL = repo.appendingPathComponent("venv/bin/python")
-        process.arguments = ["-I", repo.appendingPathComponent("live_transcribe.py").path, "watch", session.path]
-        process.currentDirectoryURL = repo
-        process.environment = ChildEnvironment.standard
+        let engine: EngineLayout
+        do {
+            engine = try EngineLocator.resolve(repoPath: settings.repo,
+                useDeveloperEngine: settings.useDeveloperEngine, resourcesURL: Bundle.main.resourceURL)
+        } catch {
+            await notice(error.localizedDescription)
+            return
+        }
+        process.executableURL = engine.python
+        process.arguments = ["-I", engine.scriptsDir.appendingPathComponent("live_transcribe.py").path, "watch", session.path]
+        process.currentDirectoryURL = engine.cwd
+        process.environment = engine.environment(merging: ChildEnvironment.standard)
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardInput = FileHandle.nullDevice
@@ -30,6 +37,7 @@ enum LiveWatcher {
         var stopped = false
         func decode(_ data: Data) async {
             guard let event = try? JSONDecoder().decode(Event.self, from: data) else { return }
+            if event.event == "downloading_model" { await notice("Downloading speech model (one time)…") }
             if event.event == "stopped" { stopped = true }
             if event.event == "segment", let value = event.text { await text(value) }
         }

@@ -164,12 +164,16 @@ final class JobQueue: ObservableObject {
         _ job: Job, event: @escaping @Sendable (Event) async -> Void
     ) async -> String? {
         let process = Process()
-        let repo = Paths.url(job.settings.repo)
-        process.executableURL = repo.appendingPathComponent("venv/bin/python")
-        process.currentDirectoryURL = repo
+        let engine: EngineLayout
+        do {
+            engine = try EngineLocator.resolve(repoPath: job.settings.repo,
+                useDeveloperEngine: job.settings.useDeveloperEngine, resourcesURL: Bundle.main.resourceURL)
+        } catch { return error.localizedDescription }
+        process.executableURL = engine.python
+        process.currentDirectoryURL = engine.cwd
         // Part C accepts --live-session without an AUDIO positional.
         let input = job.live ? ["--live-session", job.file.path] : [job.file.path]
-        let args = ["-I", repo.appendingPathComponent("summarize.py").path] + input + [
+        let args = ["-I", engine.scriptsDir.appendingPathComponent("summarize.py").path] + input + [
                     "--meetings-dir", Paths.url(job.settings.meetings).path,
                     "--summary-backend", job.settings.summaryProvider,
                     "--summary-model", job.settings.summaryModel,
@@ -177,7 +181,7 @@ final class JobQueue: ObservableObject {
                     "--correct-model", job.settings.correctModel,
                     "--proxy-url", job.settings.proxyURL]
         process.arguments = args
-        var environment = ChildEnvironment.standard
+        var environment = engine.environment(merging: ChildEnvironment.standard)
         environment["CLIPROXY_API_KEY"] = job.settings.proxyKey
         environment.removeValue(forKey: "ANTHROPIC_API_KEY")
         if [job.settings.summaryProvider, job.settings.correctProvider].contains("anthropic") {

@@ -190,6 +190,7 @@ private struct ProcessingRow: View {
         case "queued": name = "Queued"
         case "starting": name = "Starting…"
         case "finalizing": name = "Finalizing…"
+        case "downloading_model": name = "Downloading speech model (one time)…"
         case "transcribing": name = "Transcribing…"
         case "cleaning": name = "Cleaning…"
         case "correcting": name = "Correcting"

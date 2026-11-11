@@ -1,5 +1,31 @@
 # MeetingNotes for Mac
 
+## Share with a colleague (no setup needed)
+
+Requires **Apple Silicon** and **macOS 14+** (14.2+ for recording calls). The app includes Python,
+its transcription engine, ffmpeg and speaker models.
+
+1. Unzip **MeetingNotes.zip** and drag **MeetingNotes.app** to **Applications**.
+2. Try opening it, then allow the first launch via **System Settings ▸ Privacy & Security ▸ Open Anyway**.
+   If needed, run this fallback in Terminal and open the app again:
+   ```bash
+   find /Applications/MeetingNotes.app -exec xattr -d -s com.apple.quarantine {} + 2>/dev/null
+   ```
+   (Removes the "downloaded from the internet" flag from every file in the app. `xattr -r` no longer
+   exists on recent macOS, so use this form.)
+3. Connect ChatGPT or Claude in **Settings ▸ Accounts**. For account sign-in, install the corresponding
+   connection through Homebrew: `brew install --cask codex` or `brew install --cask claude-code`.
+   Alternatively, enter a **Claude API key** in **Settings ▸ Advanced**, then select **Claude API key**
+   in **Settings ▸ Models**; this needs nothing else installed.
+4. Make your first recording. It downloads the **~3 GB speech model** once, so allow extra time and disk space.
+
+To create the shareable zip from a developer checkout, run `bash scripts/package.sh`. It reads the pipeline
+from `TRANSCRIBER_DIR` (default `~/voice-memo-transcriber`), which must contain `requirements-engine.txt`
+and `scripts/download_models.sh`. Downloads are cached under `build/cache`. Use `SKIP_ENGINE=1` to reuse
+an already prepared `build/engine`.
+
+---
+
 Record a meeting (or a call), and get a clean transcript and a summary in a few minutes. Works with
 **Hindi, Hinglish and English**. Looks and feels like Apple's Voice Memos.
 
@@ -24,7 +50,7 @@ Transcription runs **on your Mac**. Only the text is sent to ChatGPT or Claude f
 | Disk | about 10 GB free |
 | Account | ChatGPT **or** Claude (your normal subscription is enough) |
 
-## Install (about 10 minutes, mostly downloads)
+## Developer install (about 10 minutes, mostly downloads)
 
 1. **Install Homebrew** if you don't have it: follow the one-line command on <https://brew.sh>.
 2. **Install Apple's developer tools** (needed to build the app). Open **Terminal** and run:
@@ -123,7 +149,10 @@ Your meetings in `~/Meetings` are kept; delete that folder too if you want.
 ## For developers
 
 - Build: `bash build_app.sh` → `build/MeetingNotes.app` · Tests: `swift test`
-- The app runs the Python pipeline from **voice-memo-transcriber** (path in Settings ▸ General). The contract between them
+- The app prefers its built-in engine. To override it, enable **Settings ▸ General ▸ Use developer engine**
+  and enter the **voice-memo-transcriber** path. Builds without an engine fall back to that checkout’s `venv`.
+  `bash scripts/build_engine.sh` prepares the engine; `build_app.sh` embeds and signs it when present.
+  The contract between the app and pipeline
   (session folders, segment files, CLI flags, JSON progress events) is in
   [voice-memo-transcriber/docs/meeting-app-plan.md](https://github.com/anish5256/voice-memo-transcriber/blob/main/docs/meeting-app-plan.md).
 - App icon: `Resources/make_icon.swift` regenerates `Resources/AppIcon-source.png`.

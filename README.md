@@ -157,7 +157,9 @@ bash install.sh            # developer setup: engine in ~/voice-memo-transcriber
 bash scripts/package.sh    # or: self-contained app + dist/MeetingNotes.zip
 ```
 
-Requires Homebrew and Xcode Command Line Tools (`xcode-select --install`). Tests: `swift test`. The app ↔ engine
+Requires Homebrew and Xcode Command Line Tools (`xcode-select --install`). Builds are signed with the identity in
+`CODESIGN_IDENTITY` (or a "MeetingNotes Local Signing" certificate if present, else ad-hoc). A stable identity keeps
+macOS permissions across updates; ad-hoc builds get a new identity every time. Tests: `swift test`. The app ↔ engine
 contract is documented in [`docs/meeting-app-plan.md`](https://github.com/anish5256/voice-memo-transcriber/blob/main/docs/meeting-app-plan.md).
 
 ## Built with

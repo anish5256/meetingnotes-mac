@@ -3,9 +3,8 @@ import Foundation
 // Pipe reads and JSON decoding stay off the UI actor. The watcher is allowed to finish
 // after Stop; finalization can recover everything if it exits early.
 enum LiveWatcher {
-    private struct Event: Decodable { let event: String; let text: String? }
-    static func run(session: URL, settings: JobSettings,
-                    text: @escaping @Sendable (String) async -> Void,
+    static func run(session: URL, settings: JobSettings, cleanup: LiveCleanupConfiguration?,
+                    text: @escaping @Sendable (LiveTranscriptEvent) async -> Void,
                     notice: @escaping @Sendable (String) async -> Void) async {
         let process = Process()
         let engine: EngineLayout
@@ -19,7 +18,10 @@ enum LiveWatcher {
         process.executableURL = engine.python
         process.arguments = engine.pythonFlags + [engine.scriptsDir.appendingPathComponent("live_transcribe.py").path, "watch", session.path]
         process.currentDirectoryURL = engine.cwd
-        process.environment = engine.environment(merging: ChildEnvironment.standard)
+        var environment = engine.environment(merging: ChildEnvironment.standard)
+        environment.removeValue(forKey: "ANTHROPIC_API_KEY")
+        if cleanup?.provider == "anthropic" { environment["ANTHROPIC_API_KEY"] = settings.anthropicKey }
+        process.environment = environment
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardInput = FileHandle.nullDevice
@@ -36,10 +38,10 @@ enum LiveWatcher {
         var buffer = Data()
         var stopped = false
         func decode(_ data: Data) async {
-            guard let event = try? JSONDecoder().decode(Event.self, from: data) else { return }
+            guard let event = try? JSONDecoder().decode(LiveTranscriptEvent.self, from: data) else { return }
             if event.event == "downloading_model" { await notice("Downloading speech model (one time)…") }
             if event.event == "stopped" { stopped = true }
-            if event.event == "segment", let value = event.text { await text(value) }
+            if event.event == "segment" || event.event == "segment_cleaned" { await text(event) }
         }
         while true {
             let data = pipe.fileHandleForReading.availableData

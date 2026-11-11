@@ -15,7 +15,7 @@ struct MeetingNotesApp: App {
     @StateObject private var queue: JobQueue
     @StateObject private var account: ProviderAccount
     @StateObject private var claudeAccount: ProviderAccount
-    @StateObject private var recorder = Recorder()
+    @StateObject private var recorder: Recorder
     @StateObject private var calendar = CalendarService()
     @AppStorage("meetingsPath") private var meetingsPath = "~/Meetings"
 
@@ -25,6 +25,7 @@ struct MeetingNotesApp: App {
         let claudeAccount = ProviderAccount(provider: .claude)
         _claudeAccount = StateObject(wrappedValue: claudeAccount)
         _account = StateObject(wrappedValue: account)
+        _recorder = StateObject(wrappedValue: Recorder(account: account, claudeAccount: claudeAccount))
         _queue = StateObject(wrappedValue: JobQueue(account: account, claudeAccount: claudeAccount))
     }
 

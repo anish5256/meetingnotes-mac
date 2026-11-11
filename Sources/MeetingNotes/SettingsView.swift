@@ -13,6 +13,9 @@ struct JobSettings: Sendable {
     let proxyURL: String
     let proxyKey: String
     var summaryProviderChosen = false
+    var liveCleanupEnabled = false
+    var liveCleanupProvider = "claude"
+    var liveCleanupModel = "claude-haiku-5-5"
     var correctProviderChosen = false
 }
 
@@ -34,6 +37,10 @@ struct SettingsView: View {
     @AppStorage("playbackOutputID") private var playbackOutputID = ""
     @AppStorage("proxyKey") private var proxyKey = ""
 
+    @AppStorage("liveCleanupEnabled") private var liveCleanupEnabled = false
+    @AppStorage("liveCleanupProvider") private var liveCleanupProvider = "claude"
+    @AppStorage("liveCleanupModel") private var liveCleanupModel = "claude-haiku-5-5"
+
     var body: some View {
         TabView {
             Form {
@@ -50,6 +57,15 @@ struct SettingsView: View {
                     Text("Summary")
                 } footer: {
                     Text("Settings apply to newly queued jobs.")
+                }
+                Section {
+                    Toggle("Enable live cleanup", isOn: $liveCleanupEnabled)
+                    ProviderModelPicker(provider: $liveCleanupProvider, model: $liveCleanupModel,
+                                        correction: false, liveCleanup: true)
+                } header: {
+                    Text("Live cleanup (while recording)")
+                } footer: {
+                    Text("Sends only the lines the on-device model is unsure about to a small, cheap model, so the live transcript improves while using few tokens. Off by default.")
                 }
             }
             .tabItem { Label("Models", systemImage: "cpu") }
@@ -148,16 +164,14 @@ struct SettingsView: View {
         if panel.runModal() == .OK, let url = panel.url { meetings = url.path }
     }
 
-    static func migrateSettings() {
-        let d = UserDefaults.standard
+    static func migrateSettings(defaults d: UserDefaults = .standard) {
         if !d.bool(forKey: "providerSettingsMigrated") {
             if d.object(forKey: "summaryProvider") == nil {
                 let provider = d.string(forKey: "backend") ?? "codex"
                 d.set(provider, forKey: "summaryProvider")
                 let key = provider == "codex" ? "codexModel" :
                     (["claude", "anthropic"].contains(provider) ? "claudeModel" : "proxyModel")
-                let fallback = ["claude", "anthropic"].contains(provider) ? "claude-opus-5-5" :
-                    (provider == "proxy" ? "gpt-5" : "")
+                let fallback = ProviderModelDefaults.model(for: provider, in: .summary)
                 if d.object(forKey: "summaryModel") == nil {
                     d.set(d.string(forKey: key) ?? fallback, forKey: "summaryModel")
                 }
@@ -173,9 +187,9 @@ struct SettingsView: View {
         }
     }
 
-    static func applyProviderChoice(chatGPTConnected: Bool, claudeConnected: Bool) -> ProviderChoice {
-        migrateSettings()
-        let d = UserDefaults.standard
+    static func applyProviderChoice(chatGPTConnected: Bool, claudeConnected: Bool,
+                                    defaults d: UserDefaults = .standard) -> ProviderChoice {
+        migrateSettings(defaults: d)
         let previous = d.string(forKey: "summaryProvider") ?? "codex"
         let choice = ProviderChoice(summaryProvider: previous,
             summaryChosen: d.bool(forKey: "summaryProviderChosen"),
@@ -184,11 +198,11 @@ struct SettingsView: View {
             chatGPTConnected: chatGPTConnected, claudeConnected: claudeConnected,
             anthropicKeySet: !(d.string(forKey: "anthropicKey") ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         if previous != choice.summaryProvider {
-            d.set(ProviderChoice.summaryModel(d.string(forKey: "summaryModel") ?? "", switchingTo: choice.summaryProvider), forKey: "summaryModel")
+            d.set(ProviderModelDefaults.model(for: choice.summaryProvider, in: .summary), forKey: "summaryModel")
         }
         d.set(choice.summaryProvider, forKey: "summaryProvider")
         if (d.string(forKey: "correctProvider") ?? "none") != choice.correctProvider {
-            d.set(ProviderChoice.summaryModel(d.string(forKey: "correctModel") ?? "", switchingTo: choice.correctProvider), forKey: "correctModel")
+            d.set(ProviderModelDefaults.model(for: choice.correctProvider, in: .correction), forKey: "correctModel")
         }
         d.set(choice.correctProvider, forKey: "correctProvider")
         return choice
@@ -209,6 +223,9 @@ struct SettingsView: View {
             proxyURL: d.string(forKey: "proxyURL") ?? "http://127.0.0.1:8317/v1",
             proxyKey: d.string(forKey: "proxyKey") ?? "",
             summaryProviderChosen: d.bool(forKey: "summaryProviderChosen"),
+            liveCleanupEnabled: d.bool(forKey: "liveCleanupEnabled"),
+            liveCleanupProvider: d.string(forKey: "liveCleanupProvider") ?? "claude",
+            liveCleanupModel: d.string(forKey: "liveCleanupModel") ?? "claude-haiku-5-5",
             correctProviderChosen: d.bool(forKey: "correctProviderChosen"))
     }
 }

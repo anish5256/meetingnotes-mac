@@ -113,11 +113,11 @@ final class JobQueue: ObservableObject {
                 chatGPTConnected: account.state == .connected, claudeConnected: claudeAccount.state == .connected,
                 anthropicKeySet: !job.settings.anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             if job.settings.summaryProvider != choice.summaryProvider {
-                job.settings.summaryModel = ProviderChoice.summaryModel(job.settings.summaryModel, switchingTo: choice.summaryProvider)
+                job.settings.summaryModel = ProviderModelDefaults.model(for: choice.summaryProvider, in: .summary)
             }
             job.settings.summaryProvider = choice.summaryProvider
             if job.settings.correctProvider != choice.correctProvider {
-                job.settings.correctModel = ProviderChoice.summaryModel(job.settings.correctModel, switchingTo: choice.correctProvider)
+                job.settings.correctModel = ProviderModelDefaults.model(for: choice.correctProvider, in: .correction)
             }
             job.settings.correctProvider = choice.correctProvider
             let resolvedSettings = job.settings

@@ -74,11 +74,18 @@ struct LiveRecordingView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading) {
-                        Text(recorder.transcript.isEmpty ? "Transcript will appear as segments finish." : recorder.transcript)
-                            .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                        if recorder.transcript.segments.isEmpty {
+                            Text("Transcript will appear as segments finish.")
+                        }
+                        ForEach(recorder.transcript.segments) { segment in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(segment.text).textSelection(.enabled)
+                                if segment.cleaned { Text("✨ cleaned").font(.caption).foregroundStyle(.secondary) }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         Color.clear.frame(height: 1).id("bottom")
                     }
-                }.onChange(of: recorder.transcript) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+                }.onChange(of: recorder.transcript.segments.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }.padding(28)
     }

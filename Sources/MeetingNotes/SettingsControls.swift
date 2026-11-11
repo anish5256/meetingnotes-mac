@@ -4,11 +4,26 @@ struct ProviderModelPicker: View {
     @Binding var provider: String
     @Binding var model: String
     let correction: Bool
+    var liveCleanup = false
     @State private var custom = false
 
     private var claude: Bool { ["claude", "anthropic"].contains(provider) }
     private var models: [String] {
-        claude ? ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"] : [""]
+        claude ? ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"] : (provider == "codex" ? ["", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna", "gpt-6-astra"] : [""])
+    }
+    private var section: ProviderModelDefaults.Section {
+        liveCleanup ? .liveCleanup : (correction ? .correction : .summary)
+    }
+    private func label(for model: String) -> String {
+        switch model {
+        case "": return provider == "codex" ? "Default (Codex chooses)" : "Default"
+        case "gpt-6.1-sol": return "GPT-6.1-Sol"
+        case "gpt-6.1-terra": return "GPT-6.1 Terra"
+        case "gpt-6-luna": return "GPT-6-Luna — fast & cheap"
+        case "gpt-6-astra": return "GPT-6-Astra — most capable"
+        case "claude-haiku-5-5": return "claude-haiku-5-5 — fast & cheap"
+        default: return model
+        }
     }
     private var selection: Binding<String> {
         Binding(get: { custom || !models.contains(model) ? "custom" : model }, set: {
@@ -19,24 +34,26 @@ struct ProviderModelPicker: View {
 
     var body: some View {
         Picker("Provider", selection: Binding(get: { provider }, set: { value in
+            let previous = provider
+            model = ProviderModelDefaults.model(model, changingFrom: previous, to: value, in: section)
             provider = value
-            custom = false
-            model = ["claude", "anthropic"].contains(value) ? "claude-opus-5-5" :
-                (value == "proxy" ? "gpt-5" : "")
+            if previous != value { custom = false }
         })) {
             if correction { Text("Off").tag("none") }
             Text("ChatGPT (your account)").tag("codex")
             Text("Claude (your account)").tag("claude")
             Text("Claude API key").tag("anthropic")
-            Text("Custom OpenAI-compatible endpoint").tag("proxy")
-            if !correction { Text("Offline test").tag("fake") }
+            if !liveCleanup {
+                Text("Custom OpenAI-compatible endpoint").tag("proxy")
+                if !correction { Text("Offline test").tag("fake") }
+            }
         }
         if provider == "proxy" {
             TextField("Model", text: $model)
         } else if provider != "none" {
             Picker("Model", selection: selection) {
                 ForEach(models, id: \.self) { value in
-                    Text(value.isEmpty ? (provider == "codex" ? "Default (Codex chooses)" : "Default") : value).tag(value)
+                    Text(label(for: value)).tag(value)
                 }
                 Text("Custom…").tag("custom")
             }

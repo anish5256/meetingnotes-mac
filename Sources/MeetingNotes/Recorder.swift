@@ -152,7 +152,14 @@ final class Recorder: ObservableObject {
     var isBusy: Bool { machine.state != .idle }
     var requestingPermission: Bool { machine.state == .starting }
     @Published private(set) var elapsed = 0.0
-    @Published private(set) var transcript = ""
+    @Published private(set) var transcript = LiveTranscript()
+    private let account: ProviderAccount
+    private let claudeAccount: ProviderAccount
+
+    init(account: ProviderAccount, claudeAccount: ProviderAccount) {
+        self.account = account
+        self.claudeAccount = claudeAccount
+    }
     @Published private(set) var linkedEvent: MeetingEventContext?
     @Published var message: String?
     @Published private(set) var levels: [Float] = Array(repeating: 0, count: 12)
@@ -236,15 +243,25 @@ final class Recorder: ObservableObject {
             let startedAt = Date()
             let systemStarted = try await capture.start(
                 device: device, url: first, includeSystemAudio: includeSystemAudio)
-            let metadata: [String: Any] = ["started_at": ISO8601DateFormatter.local.string(from: startedAt),
-                "input_device_name": device.localizedName, "segment_seconds": 30, "system_audio": systemStarted]
-            try JSONSerialization.data(withJSONObject: metadata).write(
-                to: folder.appendingPathComponent("session.json"), options: .atomic)
+            let cleanup: LiveCleanupConfiguration?
+            if settings.liveCleanupEnabled && LiveCleanupConfiguration.usable(
+                provider: settings.liveCleanupProvider, chatGPTConnected: account.state == .connected,
+                claudeConnected: claudeAccount.state == .connected, key: settings.anthropicKey) {
+                cleanup = LiveCleanupConfiguration(provider: settings.liveCleanupProvider, model: settings.liveCleanupModel)
+            } else {
+                cleanup = nil
+                if settings.liveCleanupEnabled {
+                    message = "Live cleanup is off: connect " + LiveCleanupConfiguration.providerName(settings.liveCleanupProvider)
+                }
+            }
+            let metadata = LiveSessionMetadata(startedAt: ISO8601DateFormatter.local.string(from: startedAt),
+                inputDeviceName: device.localizedName, systemAudio: systemStarted, liveCleanup: cleanup)
+            try JSONEncoder().encode(metadata).write(to: folder.appendingPathComponent("session.json"), options: .atomic)
             machine.apply(.ready)
-            elapsed = 0; segmentElapsed = 0; transcript = ""; lastTick = Date()
+            elapsed = 0; segmentElapsed = 0; transcript = LiveTranscript(); lastTick = Date()
             let currentSession = folder
             Task.detached { [weak self] in
-                await LiveWatcher.run(session: currentSession, settings: settings, text: { value in
+                await LiveWatcher.run(session: currentSession, settings: settings, cleanup: cleanup, text: { value in
                     await self?.appendTranscript(value, session: currentSession)
                 }, notice: { value in
                     await self?.watcherNotice(value, session: currentSession)
@@ -274,9 +291,9 @@ final class Recorder: ObservableObject {
             queue.enqueue(url, settings: settings, name: event.title, live: true)
         }
     }
-    private func appendTranscript(_ text: String, session: URL) {
+    private func appendTranscript(_ event: LiveTranscriptEvent, session: URL) {
         guard session == sessionURL else { return }
-        transcript += (transcript.isEmpty ? "" : "\n") + text
+        transcript.apply(event)
     }
     private func watcherNotice(_ text: String, session: URL) {
         if session == sessionURL && isRecording { message = text }

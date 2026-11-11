@@ -27,6 +27,9 @@ struct MeetingDetailView: View {
                 Text(meeting.subtitle + " · \(meeting.speakers) \(meeting.speakers == 1 ? "speaker" : "speakers")")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
+            if let cleanup = meeting.liveCleanup {
+                Text(cleanup.summary).font(.caption).foregroundStyle(.secondary)
+            }
             if let event = meeting.event {
                 VStack(alignment: .leading, spacing: 4) {
                     Label(event.title, systemImage: "calendar").font(.headline)

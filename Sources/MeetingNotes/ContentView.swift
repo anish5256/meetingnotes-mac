@@ -166,11 +166,11 @@ struct ContentView: View {
                         Button("Use \(providerName(alternative)) instead") {
                             if choice.noticeStep == .correction {
                                 correctProviderChosen = true
-                                correctModel = ProviderChoice.summaryModel(correctModel, switchingTo: alternative)
+                                correctModel = ProviderModelDefaults.model(for: alternative, in: .correction)
                                 correctProvider = alternative
                             } else {
                                 summaryProviderChosen = true
-                                summaryModel = ProviderChoice.summaryModel(summaryModel, switchingTo: alternative)
+                                summaryModel = ProviderModelDefaults.model(for: alternative, in: .summary)
                                 summaryProvider = alternative
                             }
                         }

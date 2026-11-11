@@ -90,3 +90,81 @@ struct SegmentCompletion {
     let systemRunning: Bool
     var canPublish: Bool { microphoneFinished && (systemClosed || !systemRunning) }
 }
+
+struct LiveCleanupConfiguration: Codable, Equatable, Sendable {
+    let provider: String
+    let model: String
+
+    static func usable(provider: String, chatGPTConnected: Bool, claudeConnected: Bool, key: String) -> Bool {
+        switch provider {
+        case "codex": return chatGPTConnected
+        case "claude": return claudeConnected
+        case "anthropic": return !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        default: return false
+        }
+    }
+    static func providerName(_ provider: String) -> String {
+        switch provider {
+        case "codex": return "ChatGPT"
+        case "anthropic": return "Claude API key"
+        default: return "Claude"
+        }
+    }
+}
+
+struct LiveSessionMetadata: Encodable, Sendable {
+    let startedAt: String
+    let inputDeviceName: String
+    var segmentSeconds = 30
+    let systemAudio: Bool
+    var liveCleanup: LiveCleanupConfiguration? = nil
+    enum CodingKeys: String, CodingKey {
+        case startedAt = "started_at", inputDeviceName = "input_device_name"
+        case segmentSeconds = "segment_seconds", systemAudio = "system_audio", liveCleanup = "live_cleanup"
+    }
+}
+
+struct LiveTranscriptEvent: Decodable, Sendable {
+    let event: String
+    let index: Int?
+    let text: String?
+}
+
+struct LiveTranscript: Equatable, Sendable {
+    struct Segment: Identifiable, Equatable, Sendable {
+        let id: Int
+        var text: String
+        var cleaned: Bool
+    }
+    private(set) var segments: [Segment] = []
+    mutating func apply(_ event: LiveTranscriptEvent) {
+        guard ["segment", "segment_cleaned"].contains(event.event),
+              let index = event.index, index >= 0, let text = event.text else { return }
+        let cleaned = event.event == "segment_cleaned"
+        if let position = segments.firstIndex(where: { $0.id == index }) {
+            // A delayed original event must not undo a correction.
+            guard cleaned || !segments[position].cleaned else { return }
+            segments[position].text = text
+            segments[position].cleaned = cleaned
+        } else {
+            segments.append(Segment(id: index, text: text, cleaned: cleaned))
+            segments.sort { $0.id < $1.id }
+        }
+    }
+}
+
+struct LiveCleanupStats: Decodable, Equatable, Sendable {
+    let segments: Int
+    let lines_total: Int
+    let lines_sent: Int
+    let calls: Int
+    let chars_sent: Int
+    let chars_received: Int
+    let approx_tokens: Double
+
+    var summary: String {
+        let tokens = approx_tokens >= 1000 ? String(format: "%.1fk", locale: Locale(identifier: "en_US_POSIX"), approx_tokens / 1000) :
+            String(format: "%.0f", locale: Locale(identifier: "en_US_POSIX"), approx_tokens)
+        return "Live cleanup: \(lines_sent) of \(lines_total) lines sent · ~\(tokens) tokens"
+    }
+}

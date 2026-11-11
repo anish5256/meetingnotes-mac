@@ -17,14 +17,6 @@ struct ProviderChoice: Equatable, Sendable {
         storedFlag ?? (provider != oldDefault)
     }
 
-    static func summaryModel(_ model: String, switchingTo provider: String) -> String {
-        let value = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if provider == "codex", value.hasPrefix("claude-") { return "" }
-        return provider == "claude" && (value.isEmpty || value.hasPrefix("gpt-") ||
-            value.hasPrefix("chatgpt") || value.contains("codex") ||
-            ["o1", "o3", "o4"].contains(where: { value.hasPrefix($0) })) ? "claude-opus-5-5" : model
-    }
-
     init(summaryProvider: String, summaryChosen: Bool, correctProvider: String, correctChosen: Bool,
          chatGPTConnected: Bool, claudeConnected: Bool, anthropicKeySet: Bool) {
         let alternative: String? = chatGPTConnected ? "codex" : (claudeConnected ? "claude" : nil)
@@ -54,5 +46,28 @@ struct ProviderChoice: Equatable, Sendable {
             notice = .none
             noticeStep = nil
         }
+    }
+}
+
+/// Pure defaults policy; saved models survive until their provider changes.
+enum ProviderModelDefaults {
+    enum Section: CaseIterable, Hashable, Sendable { case liveCleanup, correction, summary }
+
+    private static let table: [Section: [String: String]] = [
+        .liveCleanup: ["claude": "claude-haiku-5-5", "anthropic": "claude-haiku-5-5",
+                       "codex": "gpt-6-luna", "proxy": "gpt-5", "none": "", "fake": ""],
+        .correction: ["claude": "claude-opus-5-5", "anthropic": "claude-opus-5-5",
+                      "codex": "", "proxy": "gpt-5", "none": "", "fake": ""],
+        .summary: ["claude": "claude-opus-5-5", "anthropic": "claude-opus-5-5",
+                   "codex": "", "proxy": "gpt-5", "none": "", "fake": ""]
+    ]
+
+    static func model(for provider: String, in section: Section) -> String {
+        table[section]?[provider] ?? ""
+    }
+
+    static func model(_ saved: String, changingFrom previous: String, to provider: String,
+                      in section: Section) -> String {
+        previous == provider ? saved : model(for: provider, in: section)
     }
 }

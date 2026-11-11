@@ -79,13 +79,69 @@ final class ProviderChoiceTests: XCTestCase {
         }
     }
 
-    func testClaudeModelSwitchPreservesCustomModels() {
-        XCTAssertEqual(ProviderChoice.summaryModel("claude-opus-5-5", switchingTo: "codex"), "")
-        for model in ["", "gpt-5", "gpt-5-codex", "o3"] {
-            XCTAssertEqual(ProviderChoice.summaryModel(model, switchingTo: "claude"), "claude-opus-5-5")
+    func testDefaultsForEverySectionAndProvider() {
+        for section in ProviderModelDefaults.Section.allCases {
+            let live = section == .liveCleanup
+            let expected = ["claude": live ? "claude-haiku-5-5" : "claude-opus-5-5",
+                            "anthropic": live ? "claude-haiku-5-5" : "claude-opus-5-5",
+                            "codex": live ? "gpt-6-luna" : "",
+                            "proxy": "gpt-5", "none": "", "fake": ""]
+            for (provider, model) in expected {
+                XCTAssertEqual(ProviderModelDefaults.model(for: provider, in: section), model)
+            }
         }
-        for model in ["claude-sonnet-5-5", "my-custom-model"] {
-            XCTAssertEqual(ProviderChoice.summaryModel(model, switchingTo: "claude"), model)
+    }
+
+    func testProviderChangesResetModelsAndUnchangedProvidersPreserveSavedModels() {
+        let providers = ["claude", "anthropic", "codex", "proxy", "none", "fake"]
+        for section in ProviderModelDefaults.Section.allCases {
+            for previous in providers {
+                for provider in providers {
+                    for saved in ["claude-sonnet-5-5", "gpt-6-astra", "my-custom-model", ""] {
+                        let result = ProviderModelDefaults.model(saved, changingFrom: previous,
+                                                                 to: provider, in: section)
+                        XCTAssertEqual(result, previous == provider ? saved :
+                            ProviderModelDefaults.model(for: provider, in: section))
+                        if previous != provider {
+                            if provider == "codex" { XCTAssertFalse(result.hasPrefix("claude-")) }
+                            if ["claude", "anthropic"].contains(provider) {
+                                XCTAssertTrue(result.hasPrefix("claude-"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testAutomaticSwitchUsesDefaultsAndPreservesModelsWithoutProviderChanges() throws {
+        let suite = "ProviderChoiceTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "providerSettingsMigrated")
+        defaults.set(false, forKey: "summaryProviderChosen")
+        defaults.set(false, forKey: "correctProviderChosen")
+        for (previous, target) in [("codex", "claude"), ("claude", "codex")] {
+            defaults.set(previous, forKey: "summaryProvider")
+            defaults.set(previous, forKey: "correctProvider")
+            defaults.set("my-custom-model", forKey: "summaryModel")
+            defaults.set("my-other-model", forKey: "correctModel")
+            let choice = SettingsView.applyProviderChoice(chatGPTConnected: target == "codex",
+                claudeConnected: target == "claude", defaults: defaults)
+            XCTAssertEqual(choice.summaryProvider, target)
+            XCTAssertEqual(choice.correctProvider, target)
+            XCTAssertEqual(defaults.string(forKey: "summaryModel"),
+                           ProviderModelDefaults.model(for: target, in: .summary))
+            XCTAssertEqual(defaults.string(forKey: "correctModel"),
+                           ProviderModelDefaults.model(for: target, in: .correction))
+
+            defaults.set("saved-summary", forKey: "summaryModel")
+            defaults.set("saved-correction", forKey: "correctModel")
+            _ = SettingsView.applyProviderChoice(chatGPTConnected: target == "codex",
+                claudeConnected: target == "claude", defaults: defaults)
+            XCTAssertEqual(defaults.string(forKey: "summaryModel"), "saved-summary")
+            XCTAssertEqual(defaults.string(forKey: "correctModel"), "saved-correction")
         }
     }
 }

@@ -82,10 +82,9 @@ final class ProviderChoiceTests: XCTestCase {
     func testDefaultsForEverySectionAndProvider() {
         for section in ProviderModelDefaults.Section.allCases {
             let live = section == .liveCleanup
-            let expected = ["claude": live ? "claude-haiku-5-5" : "claude-opus-5-5",
-                            "anthropic": live ? "claude-haiku-5-5" : "claude-opus-5-5",
-                            "codex": live ? "gpt-6-luna" : "",
-                            "proxy": "gpt-5", "none": "", "fake": ""]
+            let tier = live ? "tier:cheap" : "tier:default"
+            let expected = ["claude": tier, "anthropic": tier, "codex": tier,
+                            "proxy": "gpt-5", "none": tier, "fake": tier]
             for (provider, model) in expected {
                 XCTAssertEqual(ProviderModelDefaults.model(for: provider, in: section), model)
             }
@@ -105,7 +104,7 @@ final class ProviderChoiceTests: XCTestCase {
                         if previous != provider {
                             if provider == "codex" { XCTAssertFalse(result.hasPrefix("claude-")) }
                             if ["claude", "anthropic"].contains(provider) {
-                                XCTAssertTrue(result.hasPrefix("claude-"))
+                                XCTAssertTrue(result.hasPrefix("tier:"))
                             }
                         }
                     }

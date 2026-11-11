@@ -161,6 +161,7 @@ final class Recorder: ObservableObject {
         self.claudeAccount = claudeAccount
     }
     @Published private(set) var linkedEvent: MeetingEventContext?
+    @Published private(set) var modelNotice: String?
     @Published var message: String?
     @Published private(set) var levels: [Float] = Array(repeating: 0, count: 12)
     private var ticker: Task<Void, Never>?
@@ -253,7 +254,7 @@ final class Recorder: ObservableObject {
                 inputDeviceName: device.localizedName, systemAudio: systemStarted, liveCleanup: cleanup)
             try JSONEncoder().encode(metadata).write(to: folder.appendingPathComponent("session.json"), options: .atomic)
             machine.apply(.ready)
-            elapsed = 0; segmentElapsed = 0; transcript = LiveTranscript(); lastTick = Date()
+            elapsed = 0; segmentElapsed = 0; transcript = LiveTranscript(); modelNotice = nil; lastTick = Date()
             let currentSession = folder
             Task.detached { [weak self] in
                 await LiveWatcher.run(session: currentSession, settings: settings, cleanup: cleanup, text: { value in
@@ -288,6 +289,10 @@ final class Recorder: ObservableObject {
     }
     private func appendTranscript(_ event: LiveTranscriptEvent, session: URL) {
         guard session == sessionURL else { return }
+        if event.event == "model_notice" {
+            event.modelNotice?.persist()
+            modelNotice = event.message ?? event.modelNotice?.formatted
+        }
         transcript.apply(event)
     }
     private func watcherNotice(_ text: String, session: URL) {

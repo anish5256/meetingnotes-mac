@@ -71,6 +71,9 @@ struct LiveRecordingView: View {
             if let event = recorder.linkedEvent {
                 Text(event.title).font(.title2).textSelection(.enabled)
             }
+            if let notice = recorder.modelNotice {
+                Text(notice).font(.caption).foregroundStyle(.secondary)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading) {

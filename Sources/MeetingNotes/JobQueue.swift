@@ -8,6 +8,7 @@ struct Job: Identifiable, Sendable {
     var settings: JobSettings
     var live = false
     var stage = "queued"
+    var modelNotice: String?
     var message: String?
     var folder: String?
     var title: String?
@@ -16,12 +17,21 @@ struct Job: Identifiable, Sendable {
     var finished = false
 }
 
-private struct Event: Decodable, Sendable {
+struct JobEvent: Decodable, Sendable {
     let stage: String
     let folder: String?
     let title: String?
     let message: String?
     let log: String?
+    let requested: String?
+    let used: String?
+    let provider: String?
+    let step: String?
+
+    var modelNotice: ModelNotice? {
+        guard let requested, let used, let provider, let step else { return nil }
+        return ModelNotice(requested: requested, used: used, provider: provider, step: step)
+    }
 }
 
 @MainActor
@@ -178,7 +188,33 @@ final class JobQueue: ObservableObject {
         if let index = jobs.firstIndex(where: { $0.id == id }) { change(&jobs[index]) }
     }
 
-    private func receive(_ event: Event, for id: UUID) {
+    private func receive(_ event: JobEvent, for id: UUID) {
+        if event.stage == "notice" {
+            if let structured = event.modelNotice {
+                structured.persist()
+            } else if let message = event.message, let job = jobs.first(where: { $0.id == id }) {
+                // Older stage notices contain only a message; use the active step's
+                // snapshotted selection until meta.json supplies the full fallback record.
+                let correction = job.stage == "correcting"
+                if correction || job.stage == "summarizing" {
+                    let provider = correction ? job.settings.correctProvider : job.settings.summaryProvider
+                    let model = correction ? job.settings.correctModel : job.settings.summaryModel
+                    if !model.isEmpty && !model.hasPrefix("tier:") {
+                        ModelNotice(requested: model, used: "", provider: provider,
+                                    step: correction ? "correction" : "summary", message: message).persist()
+                    }
+                }
+            }
+            let message = event.message ?? event.modelNotice?.formatted
+            update(id) { $0.modelNotice = message }
+            if let message { notice = message }
+            return
+        }
+        if event.stage == "done", let folder = event.folder,
+           let data = try? Data(contentsOf: Paths.url(folder).appendingPathComponent("meta.json")),
+           let metadata = try? JSONDecoder().decode(ModelNoticeMetadata.self, from: data) {
+            for notice in metadata.model_notices ?? [] { notice.persist() }
+        }
         update(id) {
             $0.stage = event.stage
             $0.message = event.message
@@ -190,7 +226,7 @@ final class JobQueue: ObservableObject {
     }
 
     nonisolated private static func execute(
-        _ job: Job, event: @escaping @Sendable (Event) async -> Void
+        _ job: Job, event: @escaping @Sendable (JobEvent) async -> Void
     ) async -> String? {
         let process = Process()
         let engine: EngineLayout
@@ -229,7 +265,7 @@ final class JobQueue: ObservableObject {
         var malformed = false
         func decode(_ line: Data) async {
             guard !line.isEmpty else { return }
-            if let value = try? JSONDecoder().decode(Event.self, from: line) {
+            if let value = try? JSONDecoder().decode(JobEvent.self, from: line) {
                 if value.stage == "done", value.folder != nil { done = true }
                 await event(value)
             } else { malformed = true }

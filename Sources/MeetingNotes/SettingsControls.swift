@@ -5,17 +5,21 @@ struct ProviderModelPicker: View {
     @Binding var model: String
     let correction: Bool
     var liveCleanup = false
+    @AppStorage("modelNotice.liveCleanup") private var liveNotice = ""
+    @AppStorage("modelNotice.correction") private var correctionNotice = ""
+    @AppStorage("modelNotice.summary") private var summaryNotice = ""
     @State private var custom = false
 
-    private var claude: Bool { ["claude", "anthropic"].contains(provider) }
     private var models: [String] {
-        claude ? ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"] : (provider == "codex" ? ["", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna", "gpt-6-astra"] : [""])
+        ProviderModelDefaults.menuModels(provider: provider, in: section)
     }
     private var section: ProviderModelDefaults.Section {
         liveCleanup ? .liveCleanup : (correction ? .correction : .summary)
     }
     private func label(for model: String) -> String {
         switch model {
+        case "tier:cheap": return "Latest fast model (recommended)"
+        case "tier:default": return "Latest best model (recommended)"
         case "": return provider == "codex" ? "Default (Codex chooses)" : "Default"
         case "gpt-6.1-sol": return "GPT-6.1-Sol"
         case "gpt-6.1-terra": return "GPT-6.1 Terra"
@@ -30,6 +34,11 @@ struct ProviderModelPicker: View {
             custom = $0 == "custom"
             if !custom { model = $0 }
         })
+    }
+
+    private var savedNotice: String { liveCleanup ? liveNotice : (correction ? correctionNotice : summaryNotice) }
+    private func clearNotice() {
+        if liveCleanup { liveNotice = "" } else if correction { correctionNotice = "" } else { summaryNotice = "" }
     }
 
     var body: some View {
@@ -61,6 +70,14 @@ struct ProviderModelPicker: View {
                 TextField("Custom model", text: $model)
             }
         }
+        if let notice = ModelNotice.load(savedNotice), notice.matches(provider: provider, model: model) {
+            Label(notice.formatted, systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Text("“Latest” follows the provider’s newest model, so retired models never break MeetingNotes.")
+            .font(.caption).foregroundStyle(.secondary)
+            .onChange(of: model) { _, _ in clearNotice() }
+            .onChange(of: provider) { _, _ in clearNotice() }
     }
 }
 

@@ -71,17 +71,22 @@ struct ProviderChoice: Equatable, Sendable {
 enum ProviderModelDefaults {
     enum Section: CaseIterable, Hashable, Sendable { case liveCleanup, correction, summary }
 
-    private static let table: [Section: [String: String]] = [
-        .liveCleanup: ["claude": "claude-haiku-5-5", "anthropic": "claude-haiku-5-5",
-                       "codex": "gpt-6-luna", "proxy": "gpt-5", "none": "", "fake": ""],
-        .correction: ["claude": "claude-opus-5-5", "anthropic": "claude-opus-5-5",
-                      "codex": "", "proxy": "gpt-5", "none": "", "fake": ""],
-        .summary: ["claude": "claude-opus-5-5", "anthropic": "claude-opus-5-5",
-                   "codex": "", "proxy": "gpt-5", "none": "", "fake": ""]
-    ]
-
     static func model(for provider: String, in section: Section) -> String {
-        table[section]?[provider] ?? ""
+        provider == "proxy" ? "gpt-5" : (section == .liveCleanup ? "tier:cheap" : "tier:default")
+    }
+
+    static func migrated(_ saved: String, provider: String, in section: Section) -> String {
+        guard provider != "proxy" else { return saved }
+        let old = section == .liveCleanup
+            ? ["claude-haiku-5-5", "gpt-6-luna", ""] : ["claude-opus-5-5", ""]
+        return old.contains(saved) ? model(for: provider, in: section) : saved
+    }
+
+    static func menuModels(provider: String, in section: Section) -> [String] {
+        let pinned = ["claude", "anthropic"].contains(provider)
+            ? ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-2"]
+            : (provider == "codex" ? ["", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna", "gpt-6-astra"] : [""])
+        return [model(for: provider, in: section)] + pinned
     }
 
     static func model(_ saved: String, changingFrom previous: String, to provider: String,

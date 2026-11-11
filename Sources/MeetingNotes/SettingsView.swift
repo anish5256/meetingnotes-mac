@@ -15,7 +15,7 @@ struct JobSettings: Sendable {
     var summaryProviderChosen = false
     var liveCleanupEnabled = true
     var liveCleanupProvider = "claude"
-    var liveCleanupModel = "claude-haiku-5-5"
+    var liveCleanupModel = "tier:cheap"
     var liveCleanupProviderChosen = false
     var correctProviderChosen = false
 }
@@ -27,9 +27,9 @@ struct SettingsView: View {
     @AppStorage("summaryProvider") private var summaryProvider = "codex"
     @AppStorage("summaryProviderChosen") private var summaryProviderChosen = false
     @AppStorage("correctProviderChosen") private var correctProviderChosen = false
-    @AppStorage("summaryModel") private var summaryModel = ""
+    @AppStorage("summaryModel") private var summaryModel = "tier:default"
     @AppStorage("correctProvider") private var correctProvider = "none"
-    @AppStorage("correctModel") private var correctModel = ""
+    @AppStorage("correctModel") private var correctModel = "tier:default"
     @AppStorage("anthropicKey") private var anthropicKey = ""
     @AppStorage("useDeveloperEngine") private var useDeveloperEngine = false
     @AppStorage("repoPath") private var repo = "~/voice-memo-transcriber"
@@ -44,7 +44,7 @@ struct SettingsView: View {
     @State private var cleanupConfirmation = false
     @State private var cleanupOffPending = false
     @AppStorage("liveCleanupProvider") private var liveCleanupProvider = "claude"
-    @AppStorage("liveCleanupModel") private var liveCleanupModel = "claude-haiku-5-5"
+    @AppStorage("liveCleanupModel") private var liveCleanupModel = "tier:cheap"
 
     var body: some View {
         TabView {
@@ -227,6 +227,17 @@ struct SettingsView: View {
                     oldDefault: oldDefault, storedFlag: nil), forKey: flag)
             }
         }
+        if !d.bool(forKey: "modelTiersMigrated") {
+            for (prefix, fallback, section) in [("summary", "codex", ProviderModelDefaults.Section.summary),
+                                               ("correct", "none", .correction),
+                                               ("liveCleanup", "claude", .liveCleanup)] {
+                let provider = d.string(forKey: prefix + "Provider") ?? fallback
+                let saved = d.string(forKey: prefix + "Model") ?? ProviderModelDefaults.model(for: provider, in: section)
+                d.set(ProviderModelDefaults.migrated(saved, provider: provider, in: section), forKey: prefix + "Model")
+            }
+            d.set(true, forKey: "modelTiersMigrated")
+        }
+
     }
 
     static func applyProviderChoice(chatGPTConnected: Bool, claudeConnected: Bool,
@@ -257,16 +268,16 @@ struct SettingsView: View {
             useDeveloperEngine: d.bool(forKey: "useDeveloperEngine"),
             meetings: d.string(forKey: "meetingsPath") ?? "~/Meetings",
             summaryProvider: d.string(forKey: "summaryProvider") ?? "codex",
-            summaryModel: d.string(forKey: "summaryModel") ?? "",
+            summaryModel: d.string(forKey: "summaryModel") ?? "tier:default",
             correctProvider: d.string(forKey: "correctProvider") ?? "none",
-            correctModel: d.string(forKey: "correctModel") ?? "",
+            correctModel: d.string(forKey: "correctModel") ?? "tier:default",
             anthropicKey: d.string(forKey: "anthropicKey") ?? "",
             proxyURL: d.string(forKey: "proxyURL") ?? "http://127.0.0.1:8317/v1",
             proxyKey: d.string(forKey: "proxyKey") ?? "",
             summaryProviderChosen: d.bool(forKey: "summaryProviderChosen"),
             liveCleanupEnabled: LiveCleanupPreference.load(defaults: d).enabled,
             liveCleanupProvider: d.string(forKey: "liveCleanupProvider") ?? "claude",
-            liveCleanupModel: d.string(forKey: "liveCleanupModel") ?? "claude-haiku-5-5",
+            liveCleanupModel: d.string(forKey: "liveCleanupModel") ?? "tier:cheap",
             liveCleanupProviderChosen: d.bool(forKey: "liveCleanupProviderChosen"),
             correctProviderChosen: d.bool(forKey: "correctProviderChosen"))
     }

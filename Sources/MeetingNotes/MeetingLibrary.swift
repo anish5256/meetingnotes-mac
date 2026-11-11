@@ -9,6 +9,7 @@ struct Meeting: Identifiable, Sendable {
     let speakers: Int
     var event: MeetingEventContext? = nil
     var liveCleanup: LiveCleanupStats? = nil
+    var modelNotices: [ModelNotice] = []
     var id: URL { folder }
     var subtitle: String {
         recordedAt.formatted(.dateTime.day().month(.abbreviated).year()) + " · " +
@@ -56,7 +57,7 @@ final class MeetingLibrary: ObservableObject {
                   let meta = try? JSONDecoder().decode(Metadata.self, from: data),
                   let date = parseDate(meta.recorded_at) else { return nil }
             return Meeting(folder: folder, title: meta.title, recordedAt: date,
-                           duration: meta.duration_s ?? 0, speakers: meta.speakers ?? 0, event: meta.event, liveCleanup: meta.live_cleanup)
+                           duration: meta.duration_s ?? 0, speakers: meta.speakers ?? 0, event: meta.event, liveCleanup: meta.live_cleanup, modelNotices: meta.model_notices ?? [])
         }.sorted { $0.recordedAt == $1.recordedAt ? $0.id.path > $1.id.path : $0.recordedAt > $1.recordedAt }
     }
 
@@ -66,8 +67,9 @@ final class MeetingLibrary: ObservableObject {
         let duration_s: Double?
         let speakers: Int?
         let live_cleanup: LiveCleanupStats?
+        let model_notices: [ModelNotice]?
         let event: MeetingEventContext?
-        enum CodingKeys: String, CodingKey { case title, recorded_at, duration_s, speakers, event, live_cleanup }
+        enum CodingKeys: String, CodingKey { case model_notices, title, recorded_at, duration_s, speakers, event, live_cleanup }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             title = try c.decode(String.self, forKey: .title)
@@ -75,6 +77,7 @@ final class MeetingLibrary: ObservableObject {
             duration_s = try c.decodeIfPresent(Double.self, forKey: .duration_s)
             speakers = try c.decodeIfPresent(Int.self, forKey: .speakers)
             live_cleanup = try? c.decode(LiveCleanupStats.self, forKey: .live_cleanup)
+            model_notices = try? c.decode([ModelNotice].self, forKey: .model_notices)
             event = try? c.decode(MeetingEventContext.self, forKey: .event)
         }
     }

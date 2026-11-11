@@ -27,6 +27,9 @@ struct MeetingDetailView: View {
                 Text(meeting.subtitle + " · \(meeting.speakers) \(meeting.speakers == 1 ? "speaker" : "speakers")")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
+            ForEach(Array(meeting.modelNotices.enumerated()), id: \.offset) { _, notice in
+                Text(notice.formatted).font(.caption).foregroundStyle(.secondary)
+            }
             if let cleanup = meeting.liveCleanup {
                 Text(cleanup.summary).font(.caption).foregroundStyle(.secondary)
             }

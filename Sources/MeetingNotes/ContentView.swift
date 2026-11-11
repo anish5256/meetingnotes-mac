@@ -14,8 +14,8 @@ struct ContentView: View {
     @AppStorage("correctProvider") private var correctProvider = "none"
     @AppStorage("summaryProviderChosen") private var summaryProviderChosen = false
     @AppStorage("correctProviderChosen") private var correctProviderChosen = false
-    @AppStorage("correctModel") private var correctModel = ""
-    @AppStorage("summaryModel") private var summaryModel = ""
+    @AppStorage("correctModel") private var correctModel = "tier:default"
+    @AppStorage("summaryModel") private var summaryModel = "tier:default"
     @AppStorage("anthropicKey") private var anthropicKey = ""
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: URL?
@@ -247,6 +247,7 @@ private struct ProcessingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(job.name).font(.headline).lineLimit(2)
+            if let notice = job.modelNotice { Text(notice).font(.caption).foregroundStyle(.secondary) }
             HStack(alignment: .top, spacing: 6) {
                 if let error = job.error {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)

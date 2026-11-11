@@ -41,7 +41,7 @@ enum LiveWatcher {
             guard let event = try? JSONDecoder().decode(LiveTranscriptEvent.self, from: data) else { return }
             if event.event == "downloading_model" { await notice("Downloading speech model (one time)…") }
             if event.event == "stopped" { stopped = true }
-            if event.event == "segment" || event.event == "segment_cleaned" { await text(event) }
+            if event.event == "model_notice" || event.event == "segment" || event.event == "segment_cleaned" { await text(event) }
         }
         while true {
             let data = pipe.fileHandleForReading.availableData

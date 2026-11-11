@@ -40,9 +40,7 @@ final class LiveCleanupTests: XCTestCase {
                         chatGPTConnected: chatGPT, claudeConnected: claude, anthropicKeySet: key)
                     let expected = claude ? "claude" : (chatGPT ? "codex" : (key ? "anthropic" : nil))
                     XCTAssertEqual(choice?.provider, expected)
-                    XCTAssertEqual(choice?.model, expected.map {
-                        $0 == "codex" ? "gpt-6-luna" : "claude-haiku-5-5"
-                    })
+                    XCTAssertEqual(choice?.model, expected.map { _ in "tier:cheap" })
                     let session = LiveSessionMetadata(startedAt: "now", inputDeviceName: "Mic",
                         systemAudio: false, liveCleanup: choice)
                     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) as? [String: Any])

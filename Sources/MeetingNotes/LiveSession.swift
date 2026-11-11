@@ -128,6 +128,16 @@ struct LiveTranscriptEvent: Decodable, Sendable {
     let event: String
     let index: Int?
     let text: String?
+    var message: String? = nil
+    var requested: String? = nil
+    var used: String? = nil
+    var provider: String? = nil
+    var step: String? = nil
+
+    var modelNotice: ModelNotice? {
+        guard let requested, let used, let provider else { return nil }
+        return ModelNotice(requested: requested, used: used, provider: provider, step: step ?? "live_cleanup")
+    }
 }
 
 struct LiveTranscript: Equatable, Sendable {

@@ -1,22 +1,5 @@
 import SwiftUI
-
-private struct MeetingText: Sendable {
-    var summary = ""
-    var transcript = ""
-    var english = ""
-    var error: String?
-
-    static func load(_ folder: URL) -> MeetingText {
-        func read(_ name: String) -> String? {
-            try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8)
-        }
-        let summary = read("summary.md")
-        let transcript = read("transcript.corrected.txt") ?? read("transcript.hinglish.txt")
-        return MeetingText(summary: summary ?? "", transcript: transcript ?? "",
-                           english: read("transcript.english.txt") ?? "",
-                           error: summary == nil || transcript == nil ? "Some meeting files could not be read." : nil)
-    }
-}
+import AppKit
 
 struct MeetingDetailView: View {
     let meeting: Meeting
@@ -24,6 +7,8 @@ struct MeetingDetailView: View {
     @State private var tab = "Summary"
     @State private var english = false
     @State private var content = MeetingText()
+    @State private var copied = false
+    @State private var copyConfirmation: Task<Void, Never>?
 
     private func eventTime(_ event: MeetingEventContext) -> String {
         func date(_ value: String) -> Date? {
@@ -55,6 +40,11 @@ struct MeetingDetailView: View {
                     Text("Summary").tag("Summary")
                     Text("Transcript").tag("Transcript")
                 }.labelsHidden().pickerStyle(.segmented).frame(maxWidth: 260)
+                Button {
+                    copy(tab == "Summary" ? .summary : .transcript)
+                } label: {
+                    Label(copied ? "Copied" : "Copy \(tab)", systemImage: "doc.on.doc")
+                }
                 Spacer()
                 if tab == "Transcript" {
                     Toggle("Show English", isOn: $english).toggleStyle(.checkbox)
@@ -62,21 +52,18 @@ struct MeetingDetailView: View {
                 }
             }
             Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if let error = content.error { Text(error).font(.caption).foregroundStyle(.secondary) }
-                    if tab == "Summary" {
-                        SummaryTextView(source: content.summary)
-                    } else {
-                        TranscriptTextView(source: english ? content.english : content.transcript)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .padding(.bottom, 24)
+            if let error = content.error { Text(error).font(.caption).foregroundStyle(.secondary) }
+            if tab == "Summary" {
+                SummaryTextView(source: content.summary)
+            } else {
+                TranscriptTextView(source: english ? content.english : content.transcript)
             }
         }
         .padding(28)
+        .focusedSceneValue(\.meetingCopyActions, MeetingCopyActions(
+            transcript: { copy(.transcript) }, summary: { copy(.summary) }))
+        .onChange(of: tab) { _, _ in clearConfirmation() }
+        .onChange(of: english) { _, _ in clearConfirmation() }
         .task(id: meeting.id) {
             player.load(meeting.folder)
             let folder = meeting.folder
@@ -84,6 +71,24 @@ struct MeetingDetailView: View {
             guard !Task.isCancelled else { return }
             content = loaded
         }
-        .onDisappear { player.stop() }
+        .onDisappear { player.stop(); clearConfirmation() }
     }
+
+    private func clearConfirmation() {
+        copyConfirmation?.cancel()
+        copied = false
+    }
+
+    private func copy(_ target: MeetingTextTab) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(content.copyText(for: target, showEnglish: english), forType: .string)
+        clearConfirmation()
+        copied = true
+        copyConfirmation = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(1500)) }
+            catch { return }
+            copied = false
+        }
+    }
+
 }

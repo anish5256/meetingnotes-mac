@@ -11,6 +11,7 @@ enum Paths {
 @main
 struct MeetingNotesApp: App {
     @NSApplicationDelegateAdaptor(MeetingAppDelegate.self) private var delegate
+    @FocusedValue(\.meetingCopyActions) private var meetingCopyActions
     @StateObject private var queue: JobQueue
     @StateObject private var account: ProviderAccount
     @StateObject private var claudeAccount: ProviderAccount
@@ -52,6 +53,22 @@ struct MeetingNotesApp: App {
         // animating them, so it jumped to the right while the sidebar expanded.
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
+            CommandGroup(after: .pasteboard) {
+                Button("Copy Transcript") { meetingCopyActions?.transcript() }
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                    .disabled(meetingCopyActions == nil)
+                Button("Copy Summary") { meetingCopyActions?.summary() }
+                    .keyboardShortcut("c", modifiers: [.command, .option, .shift])
+                    .disabled(meetingCopyActions == nil)
+            }
+            CommandGroup(after: .textEditing) {
+                Button("Find…") {
+                    let item = NSMenuItem()
+                    item.tag = NSTextFinder.Action.showFindInterface.rawValue
+                    NSApp.sendAction(#selector(NSTextView.performFindPanelAction(_:)), to: nil, from: item)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
             CommandGroup(after: .newItem) {
                 Button("Open Meetings Folder") {
                     let url = Paths.url(meetingsPath)

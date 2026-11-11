@@ -13,9 +13,10 @@ struct JobSettings: Sendable {
     let proxyURL: String
     let proxyKey: String
     var summaryProviderChosen = false
-    var liveCleanupEnabled = false
+    var liveCleanupEnabled = true
     var liveCleanupProvider = "claude"
     var liveCleanupModel = "claude-haiku-5-5"
+    var liveCleanupProviderChosen = false
     var correctProviderChosen = false
 }
 
@@ -37,7 +38,11 @@ struct SettingsView: View {
     @AppStorage("playbackOutputID") private var playbackOutputID = ""
     @AppStorage("proxyKey") private var proxyKey = ""
 
-    @AppStorage("liveCleanupEnabled") private var liveCleanupEnabled = false
+    @AppStorage("liveCleanupEnabledV2") private var liveCleanupEnabled = true
+    @AppStorage("liveCleanupEnabledChosen") private var liveCleanupEnabledChosen = false
+    @AppStorage("liveCleanupProviderChosen") private var liveCleanupProviderChosen = false
+    @State private var cleanupConfirmation = false
+    @State private var cleanupOffPending = false
     @AppStorage("liveCleanupProvider") private var liveCleanupProvider = "claude"
     @AppStorage("liveCleanupModel") private var liveCleanupModel = "claude-haiku-5-5"
 
@@ -59,13 +64,26 @@ struct SettingsView: View {
                     Text("Settings apply to newly queued jobs.")
                 }
                 Section {
-                    Toggle("Enable live cleanup", isOn: $liveCleanupEnabled)
-                    ProviderModelPicker(provider: $liveCleanupProvider, model: $liveCleanupModel,
+                    Toggle("Enable live cleanup", isOn: Binding(
+                        get: { liveCleanupEnabledChosen ? liveCleanupEnabled : true },
+                        set: { updateCleanup($0 ? .turnOn : .requestOff) }))
+                    ProviderModelPicker(provider: Binding(get: { cleanupChoice?.provider ?? liveCleanupProvider },
+                        set: { liveCleanupProvider = $0; liveCleanupProviderChosen = true }),
+                        model: Binding(get: { cleanupChoice?.model ?? liveCleanupModel },
+                        set: { value in
+                            liveCleanupProvider = cleanupChoice?.provider ?? liveCleanupProvider
+                            liveCleanupModel = value
+                            liveCleanupProviderChosen = true
+                        }),
                                         correction: false, liveCleanup: true)
+                    if cleanupChoice == nil {
+                        Text("Connect ChatGPT or Claude to use live cleanup")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("Live cleanup (while recording)")
                 } footer: {
-                    Text("Sends only the lines the on-device model is unsure about to a small, cheap model, so the live transcript improves while using few tokens. Off by default.")
+                    Text("On by default. Sends only uncertain lines to a small model (about 1 in 5), roughly 20k tokens per hour, for a much cleaner live transcript.")
                 }
             }
             .tabItem { Label("Models", systemImage: "cpu") }
@@ -143,8 +161,32 @@ struct SettingsView: View {
             }
             .tabItem { Label("Advanced", systemImage: "slider.horizontal.3") }
         }
+        .alert("Turn off live cleanup?", isPresented: $cleanupConfirmation) {
+            Button("Keep On", role: .cancel) { updateCleanup(.cancel) }
+                .keyboardShortcut(.defaultAction)
+            Button("Turn Off", role: .destructive) { updateCleanup(.confirmOff) }
+        } message: {
+            Text("Live cleanup sends only the lines the on-device model is unsure about (about 1 in 5) to a small, fast model: roughly 20k tokens per hour of meeting (less than a cent per hour with an API key). It noticeably improves names, Hinglish spellings and technical words while you record.")
+        }
         .formStyle(.grouped)
         .frame(width: 520, height: 460)
+    }
+
+    private var cleanupChoice: LiveCleanupConfiguration? {
+        ProviderChoice.liveCleanup(provider: liveCleanupProvider, model: liveCleanupModel,
+            chosen: liveCleanupProviderChosen, chatGPTConnected: account.state == .connected,
+            claudeConnected: claudeAccount.state == .connected,
+            anthropicKeySet: !anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func updateCleanup(_ action: LiveCleanupPreference.Action) {
+        var state = LiveCleanupPreference(enabled: liveCleanupEnabledChosen ? liveCleanupEnabled : true,
+            explicitChoice: liveCleanupEnabledChosen, pendingConfirmation: cleanupOffPending)
+        state.apply(action)
+        liveCleanupEnabled = state.enabled
+        liveCleanupEnabledChosen = state.explicitChoice
+        cleanupOffPending = state.pendingConfirmation
+        cleanupConfirmation = state.pendingConfirmation
     }
 
     private var engineDescription: String {
@@ -208,9 +250,8 @@ struct SettingsView: View {
         return choice
     }
 
-    static func snapshot() -> JobSettings {
-        migrateSettings()
-        let d = UserDefaults.standard
+    static func snapshot(defaults d: UserDefaults = .standard) -> JobSettings {
+        migrateSettings(defaults: d)
         return JobSettings(
             repo: d.string(forKey: "repoPath") ?? "~/voice-memo-transcriber",
             useDeveloperEngine: d.bool(forKey: "useDeveloperEngine"),
@@ -223,9 +264,10 @@ struct SettingsView: View {
             proxyURL: d.string(forKey: "proxyURL") ?? "http://127.0.0.1:8317/v1",
             proxyKey: d.string(forKey: "proxyKey") ?? "",
             summaryProviderChosen: d.bool(forKey: "summaryProviderChosen"),
-            liveCleanupEnabled: d.bool(forKey: "liveCleanupEnabled"),
+            liveCleanupEnabled: LiveCleanupPreference.load(defaults: d).enabled,
             liveCleanupProvider: d.string(forKey: "liveCleanupProvider") ?? "claude",
             liveCleanupModel: d.string(forKey: "liveCleanupModel") ?? "claude-haiku-5-5",
+            liveCleanupProviderChosen: d.bool(forKey: "liveCleanupProviderChosen"),
             correctProviderChosen: d.bool(forKey: "correctProviderChosen"))
     }
 }

@@ -13,6 +13,24 @@ struct ProviderChoice: Equatable, Sendable {
     let notice: Notice
     let noticeStep: Step?
 
+    /// Live cleanup prefers a small Claude model in AUTO, independently of other steps.
+    static func liveCleanup(provider: String, model: String, chosen: Bool,
+                            chatGPTConnected: Bool, claudeConnected: Bool,
+                            anthropicKeySet: Bool) -> LiveCleanupConfiguration? {
+        let selected = chosen ? provider : (claudeConnected ? "claude" :
+            (chatGPTConnected ? "codex" : (anthropicKeySet ? "anthropic" : "none")))
+        let usable: Bool
+        switch selected {
+        case "claude": usable = claudeConnected
+        case "codex": usable = chatGPTConnected
+        case "anthropic": usable = anthropicKeySet
+        default: usable = false
+        }
+        guard usable else { return nil }
+        return LiveCleanupConfiguration(provider: selected,
+            model: chosen ? model : ProviderModelDefaults.model(for: selected, in: .liveCleanup))
+    }
+
     static func migratedChoice(provider: String, oldDefault: String, storedFlag: Bool?) -> Bool {
         storedFlag ?? (provider != oldDefault)
     }
@@ -69,5 +87,38 @@ enum ProviderModelDefaults {
     static func model(_ saved: String, changingFrom previous: String, to provider: String,
                       in section: Section) -> String {
         previous == provider ? saved : model(for: provider, in: section)
+    }
+}
+
+/// The old default-off preference is deliberately not consulted.
+struct LiveCleanupPreference: Equatable, Sendable {
+    var enabled = true
+    var explicitChoice = false
+    var pendingConfirmation = false
+
+    enum Action { case requestOff, turnOn, confirmOff, cancel }
+
+    mutating func apply(_ action: Action) {
+        switch action {
+        case .requestOff:
+            pendingConfirmation = enabled
+        case .turnOn:
+            enabled = true
+            explicitChoice = true
+            pendingConfirmation = false
+        case .confirmOff:
+            guard pendingConfirmation else { return }
+            enabled = false
+            explicitChoice = true
+            pendingConfirmation = false
+        case .cancel:
+            pendingConfirmation = false
+        }
+    }
+
+    static func load(defaults: UserDefaults) -> Self {
+        let explicit = defaults.bool(forKey: "liveCleanupEnabledChosen")
+        return Self(enabled: explicit ? (defaults.object(forKey: "liveCleanupEnabledV2") as? Bool ?? true) : true,
+                    explicitChoice: explicit)
     }
 }

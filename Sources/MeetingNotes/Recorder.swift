@@ -243,17 +243,12 @@ final class Recorder: ObservableObject {
             let startedAt = Date()
             let systemStarted = try await capture.start(
                 device: device, url: first, includeSystemAudio: includeSystemAudio)
-            let cleanup: LiveCleanupConfiguration?
-            if settings.liveCleanupEnabled && LiveCleanupConfiguration.usable(
-                provider: settings.liveCleanupProvider, chatGPTConnected: account.state == .connected,
-                claudeConnected: claudeAccount.state == .connected, key: settings.anthropicKey) {
-                cleanup = LiveCleanupConfiguration(provider: settings.liveCleanupProvider, model: settings.liveCleanupModel)
-            } else {
-                cleanup = nil
-                if settings.liveCleanupEnabled {
-                    message = "Live cleanup is off: connect " + LiveCleanupConfiguration.providerName(settings.liveCleanupProvider)
-                }
-            }
+            let cleanup = settings.liveCleanupEnabled ? ProviderChoice.liveCleanup(
+                provider: settings.liveCleanupProvider, model: settings.liveCleanupModel,
+                chosen: settings.liveCleanupProviderChosen,
+                chatGPTConnected: account.state == .connected,
+                claudeConnected: claudeAccount.state == .connected,
+                anthropicKeySet: !settings.anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) : nil
             let metadata = LiveSessionMetadata(startedAt: ISO8601DateFormatter.local.string(from: startedAt),
                 inputDeviceName: device.localizedName, systemAudio: systemStarted, liveCleanup: cleanup)
             try JSONEncoder().encode(metadata).write(to: folder.appendingPathComponent("session.json"), options: .atomic)

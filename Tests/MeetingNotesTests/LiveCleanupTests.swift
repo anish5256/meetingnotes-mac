@@ -2,6 +2,64 @@ import XCTest
 @testable import MeetingNotes
 
 final class LiveCleanupTests: XCTestCase {
+    @MainActor
+    func testFreshAndLegacyPreferencesDefaultOnAndExplicitOffPersists() throws {
+        let suite = "LiveCleanupTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertTrue(SettingsView.snapshot(defaults: defaults).liveCleanupEnabled)
+        for legacy in [false, true] {
+            defaults.set(legacy, forKey: "liveCleanupEnabled")
+            defaults.set(false, forKey: "liveCleanupEnabledV2")
+            XCTAssertTrue(SettingsView.snapshot(defaults: defaults).liveCleanupEnabled)
+        }
+        defaults.set(true, forKey: "liveCleanupEnabledChosen")
+        XCTAssertFalse(SettingsView.snapshot(defaults: defaults).liveCleanupEnabled)
+    }
+
+    func testOffRequiresConfirmationAndCancelKeepsOn() {
+        var state = LiveCleanupPreference()
+        state.apply(.confirmOff)
+        XCTAssertTrue(state.enabled)
+        state.apply(.requestOff)
+        XCTAssertEqual(state, LiveCleanupPreference(enabled: true, explicitChoice: false, pendingConfirmation: true))
+        state.apply(.cancel)
+        XCTAssertEqual(state, LiveCleanupPreference())
+        state.apply(.requestOff)
+        state.apply(.confirmOff)
+        XCTAssertEqual(state, LiveCleanupPreference(enabled: false, explicitChoice: true))
+        state.apply(.turnOn)
+        XCTAssertEqual(state, LiveCleanupPreference(enabled: true, explicitChoice: true))
+    }
+
+    func testAutoProviderForAllAccountAndKeyCombinations() throws {
+        for chatGPT in [false, true] {
+            for claude in [false, true] {
+                for key in [false, true] {
+                    let choice = ProviderChoice.liveCleanup(provider: "codex", model: "old-model", chosen: false,
+                        chatGPTConnected: chatGPT, claudeConnected: claude, anthropicKeySet: key)
+                    let expected = claude ? "claude" : (chatGPT ? "codex" : (key ? "anthropic" : nil))
+                    XCTAssertEqual(choice?.provider, expected)
+                    XCTAssertEqual(choice?.model, expected.map {
+                        $0 == "codex" ? "gpt-6-luna" : "claude-haiku-5-5"
+                    })
+                    let session = LiveSessionMetadata(startedAt: "now", inputDeviceName: "Mic",
+                        systemAudio: false, liveCleanup: choice)
+                    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) as? [String: Any])
+                    XCTAssertEqual(json["live_cleanup"] == nil, expected == nil)
+                }
+            }
+        }
+    }
+
+    func testExplicitProviderAndModelArePreservedWithoutFallback() {
+        XCTAssertEqual(ProviderChoice.liveCleanup(provider: "codex", model: "custom", chosen: true,
+            chatGPTConnected: true, claudeConnected: true, anthropicKeySet: true),
+            LiveCleanupConfiguration(provider: "codex", model: "custom"))
+        XCTAssertNil(ProviderChoice.liveCleanup(provider: "codex", model: "custom", chosen: true,
+            chatGPTConnected: false, claudeConnected: true, anthropicKeySet: true))
+    }
+
     func testSessionEncodingOmitsDisabledCleanupAndIncludesEnabledConfiguration() throws {
         var session = LiveSessionMetadata(startedAt: "2026-11-11T10:00:00Z",
                                           inputDeviceName: "Mic", systemAudio: true)

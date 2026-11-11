@@ -5,13 +5,15 @@ struct JobSettings: Sendable {
     let repo: String
     var useDeveloperEngine = false
     let meetings: String
-    let summaryProvider: String
-    let summaryModel: String
-    let correctProvider: String
-    let correctModel: String
+    var summaryProvider: String
+    var summaryModel: String
+    var correctProvider: String
+    var correctModel: String
     let anthropicKey: String
     let proxyURL: String
     let proxyKey: String
+    var summaryProviderChosen = false
+    var correctProviderChosen = false
 }
 
 struct SettingsView: View {
@@ -19,6 +21,8 @@ struct SettingsView: View {
     @ObservedObject var claudeAccount: ProviderAccount
     @ObservedObject var calendar: CalendarService
     @AppStorage("summaryProvider") private var summaryProvider = "codex"
+    @AppStorage("summaryProviderChosen") private var summaryProviderChosen = false
+    @AppStorage("correctProviderChosen") private var correctProviderChosen = false
     @AppStorage("summaryModel") private var summaryModel = ""
     @AppStorage("correctProvider") private var correctProvider = "none"
     @AppStorage("correctModel") private var correctModel = ""
@@ -34,14 +38,14 @@ struct SettingsView: View {
         TabView {
             Form {
                 Section {
-                    ProviderModelPicker(provider: $correctProvider, model: $correctModel, correction: true)
+                    ProviderModelPicker(provider: Binding(get: { correctProvider }, set: { correctProviderChosen = true; correctProvider = $0 }), model: $correctModel, correction: true)
                 } header: {
                     Text("Transcript correction")
                 } footer: {
                     Text("Optionally correct the transcript before summarizing.")
                 }
                 Section {
-                    ProviderModelPicker(provider: $summaryProvider, model: $summaryModel, correction: false)
+                    ProviderModelPicker(provider: Binding(get: { summaryProvider }, set: { summaryProviderChosen = true; summaryProvider = $0 }), model: $summaryModel, correction: false)
                 } header: {
                     Text("Summary")
                 } footer: {
@@ -146,19 +150,48 @@ struct SettingsView: View {
 
     static func migrateSettings() {
         let d = UserDefaults.standard
-        guard !d.bool(forKey: "providerSettingsMigrated") else { return }
-        if d.object(forKey: "summaryProvider") == nil {
-            let provider = d.string(forKey: "backend") ?? "codex"
-            d.set(provider, forKey: "summaryProvider")
-            let key = provider == "codex" ? "codexModel" :
-                (["claude", "anthropic"].contains(provider) ? "claudeModel" : "proxyModel")
-            let fallback = ["claude", "anthropic"].contains(provider) ? "claude-opus-5-5" :
-                (provider == "proxy" ? "gpt-5" : "")
-            if d.object(forKey: "summaryModel") == nil {
-                d.set(d.string(forKey: key) ?? fallback, forKey: "summaryModel")
+        if !d.bool(forKey: "providerSettingsMigrated") {
+            if d.object(forKey: "summaryProvider") == nil {
+                let provider = d.string(forKey: "backend") ?? "codex"
+                d.set(provider, forKey: "summaryProvider")
+                let key = provider == "codex" ? "codexModel" :
+                    (["claude", "anthropic"].contains(provider) ? "claudeModel" : "proxyModel")
+                let fallback = ["claude", "anthropic"].contains(provider) ? "claude-opus-5-5" :
+                    (provider == "proxy" ? "gpt-5" : "")
+                if d.object(forKey: "summaryModel") == nil {
+                    d.set(d.string(forKey: key) ?? fallback, forKey: "summaryModel")
+                }
+            }
+            d.set(true, forKey: "providerSettingsMigrated")
+        }
+        for (key, oldDefault) in [("summaryProvider", "codex"), ("correctProvider", "none")] {
+            let flag = key + "Chosen"
+            if d.object(forKey: flag) == nil {
+                d.set(ProviderChoice.migratedChoice(provider: d.string(forKey: key) ?? oldDefault,
+                    oldDefault: oldDefault, storedFlag: nil), forKey: flag)
             }
         }
-        d.set(true, forKey: "providerSettingsMigrated")
+    }
+
+    static func applyProviderChoice(chatGPTConnected: Bool, claudeConnected: Bool) -> ProviderChoice {
+        migrateSettings()
+        let d = UserDefaults.standard
+        let previous = d.string(forKey: "summaryProvider") ?? "codex"
+        let choice = ProviderChoice(summaryProvider: previous,
+            summaryChosen: d.bool(forKey: "summaryProviderChosen"),
+            correctProvider: d.string(forKey: "correctProvider") ?? "none",
+            correctChosen: d.bool(forKey: "correctProviderChosen"),
+            chatGPTConnected: chatGPTConnected, claudeConnected: claudeConnected,
+            anthropicKeySet: !(d.string(forKey: "anthropicKey") ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        if previous != choice.summaryProvider {
+            d.set(ProviderChoice.summaryModel(d.string(forKey: "summaryModel") ?? "", switchingTo: choice.summaryProvider), forKey: "summaryModel")
+        }
+        d.set(choice.summaryProvider, forKey: "summaryProvider")
+        if (d.string(forKey: "correctProvider") ?? "none") != choice.correctProvider {
+            d.set(ProviderChoice.summaryModel(d.string(forKey: "correctModel") ?? "", switchingTo: choice.correctProvider), forKey: "correctModel")
+        }
+        d.set(choice.correctProvider, forKey: "correctProvider")
+        return choice
     }
 
     static func snapshot() -> JobSettings {
@@ -174,7 +207,9 @@ struct SettingsView: View {
             correctModel: d.string(forKey: "correctModel") ?? "",
             anthropicKey: d.string(forKey: "anthropicKey") ?? "",
             proxyURL: d.string(forKey: "proxyURL") ?? "http://127.0.0.1:8317/v1",
-            proxyKey: d.string(forKey: "proxyKey") ?? "")
+            proxyKey: d.string(forKey: "proxyKey") ?? "",
+            summaryProviderChosen: d.bool(forKey: "summaryProviderChosen"),
+            correctProviderChosen: d.bool(forKey: "correctProviderChosen"))
     }
 }
 

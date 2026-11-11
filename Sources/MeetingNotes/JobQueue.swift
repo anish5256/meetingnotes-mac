@@ -5,7 +5,7 @@ struct Job: Identifiable, Sendable {
     let id = UUID()
     let file: URL
     let name: String
-    let settings: JobSettings
+    var settings: JobSettings
     var live = false
     var stage = "queued"
     var message: String?
@@ -29,6 +29,7 @@ final class JobQueue: ObservableObject {
     static let extensions: Set<String> = ["m4a", "mp3", "wav", "aac", "caf", "ogg", "opus", "flac", "aiff", "mp4", "mov"]
     @Published private(set) var jobs: [Job] = []
     @Published var notice: String?
+    private var accountObservers: Set<AnyCancellable> = []
     private var running = false
     private var recovered = false
     private let recoveryCandidates: [URL]
@@ -39,6 +40,16 @@ final class JobQueue: ObservableObject {
         self.account = account
         self.claudeAccount = claudeAccount
         recoveryCandidates = LiveSessionScanner.scan(meetings: Paths.url(SettingsView.snapshot().meetings), queued: [])
+        account.$state.combineLatest(claudeAccount.$state).sink { [weak self] _, _ in
+            Task { @MainActor [weak self] in self?.applyProviderChoice() }
+        }.store(in: &accountObservers)
+    }
+
+    func applyProviderChoice() {
+        guard account.state != .checking, account.state != .connecting,
+              claudeAccount.state != .checking, claudeAccount.state != .connecting else { return }
+        _ = SettingsView.applyProviderChoice(chatGPTConnected: account.state == .connected,
+                                             claudeConnected: claudeAccount.state == .connected)
     }
 
     func importFiles(_ urls: [URL]) async {
@@ -89,12 +100,30 @@ final class JobQueue: ObservableObject {
         running = true
         update(job.id) { $0.stage = "starting" }
         Task {
-            let providers = [job.settings.summaryProvider, job.settings.correctProvider]
+            var job = job
             // Launch recovery can race an activation-triggered account refresh.
-            while (providers.contains("codex") && account.state == .checking) ||
-                  (providers.contains("claude") && claudeAccount.state == .checking) {
+            while account.state == .checking || claudeAccount.state == .checking ||
+                  account.state == .connecting || claudeAccount.state == .connecting {
                 try? await Task.sleep(for: .milliseconds(100))
             }
+            applyProviderChoice()
+            let choice = ProviderChoice(summaryProvider: job.settings.summaryProvider,
+                summaryChosen: job.settings.summaryProviderChosen,
+                correctProvider: job.settings.correctProvider, correctChosen: job.settings.correctProviderChosen,
+                chatGPTConnected: account.state == .connected, claudeConnected: claudeAccount.state == .connected,
+                anthropicKeySet: !job.settings.anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if job.settings.summaryProvider != choice.summaryProvider {
+                job.settings.summaryModel = ProviderChoice.summaryModel(job.settings.summaryModel, switchingTo: choice.summaryProvider)
+            }
+            job.settings.summaryProvider = choice.summaryProvider
+            if job.settings.correctProvider != choice.correctProvider {
+                job.settings.correctModel = ProviderChoice.summaryModel(job.settings.correctModel, switchingTo: choice.correctProvider)
+            }
+            job.settings.correctProvider = choice.correctProvider
+            let resolvedSettings = job.settings
+            update(job.id) { $0.settings = resolvedSettings }
+            let providers = [job.settings.summaryProvider, job.settings.correctProvider]
+            let executionJob = job
             let error: String?
             if providers.contains("codex"), account.state != .connected {
                 error = "Connect ChatGPT first (button at the top)"
@@ -115,8 +144,8 @@ final class JobQueue: ObservableObject {
                 return
             }
             let result = await Task.detached {
-                await Self.execute(job) { event in
-                    await self.receive(event, for: job.id)
+                await Self.execute(executionJob) { event in
+                    await self.receive(event, for: executionJob.id)
                 }
             }.value
             update(job.id) {

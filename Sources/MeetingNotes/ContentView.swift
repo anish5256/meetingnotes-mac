@@ -12,6 +12,10 @@ struct ContentView: View {
     @AppStorage("meetingsPath") private var meetingsPath = "~/Meetings"
     @AppStorage("summaryProvider") private var summaryProvider = "codex"
     @AppStorage("correctProvider") private var correctProvider = "none"
+    @AppStorage("summaryProviderChosen") private var summaryProviderChosen = false
+    @AppStorage("correctProviderChosen") private var correctProviderChosen = false
+    @AppStorage("correctModel") private var correctModel = ""
+    @AppStorage("summaryModel") private var summaryModel = ""
     @AppStorage("anthropicKey") private var anthropicKey = ""
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: URL?
@@ -130,24 +134,63 @@ struct ContentView: View {
         }
     }
 
+    private var providerChoice: ProviderChoice {
+        ProviderChoice(summaryProvider: summaryProvider, summaryChosen: summaryProviderChosen,
+            correctProvider: correctProvider, correctChosen: correctProviderChosen,
+            chatGPTConnected: account.state == .connected, claudeConnected: claudeAccount.state == .connected,
+            anthropicKeySet: !anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func providerName(_ provider: String) -> String {
+        provider == "codex" ? "ChatGPT" : (provider == "anthropic" ? "Claude API key" : "Claude")
+    }
+
     @ViewBuilder private var connectionNotice: some View {
-        let providers = [summaryProvider, correctProvider]
-        if providers.contains("codex"), account.state != .connected {
-            notice("ChatGPT is not connected.")
-        } else if providers.contains("claude"), claudeAccount.state != .connected {
-            notice("Claude is not connected.")
-        } else if providers.contains("anthropic"), anthropicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            notice("Add an Anthropic API key to continue.")
+        let choice = providerChoice
+        if account.state != .checking && claudeAccount.state != .checking &&
+            account.state != .connecting && claudeAccount.state != .connecting {
+            switch choice.notice {
+            case .none: EmptyView()
+            case .connectAny:
+                HStack {
+                    Text("Connect ChatGPT or Claude to get transcript cleanup and summaries.")
+                    Spacer()
+                    Button("Connect ChatGPT") { connect("codex") }
+                    Button("Connect Claude") { connect("claude") }
+                }.font(.callout).padding(12).background(.bar)
+            case let .selectedNotConnected(selected, alternative):
+                HStack {
+                    Text("\(choice.noticeStep?.rawValue ?? "Summary") is set to \(providerName(selected)), which isn't connected.")
+                    Spacer()
+                    if let alternative {
+                        Button("Use \(providerName(alternative)) instead") {
+                            if choice.noticeStep == .correction {
+                                correctProviderChosen = true
+                                correctModel = ProviderChoice.summaryModel(correctModel, switchingTo: alternative)
+                                correctProvider = alternative
+                            } else {
+                                summaryProviderChosen = true
+                                summaryModel = ProviderChoice.summaryModel(summaryModel, switchingTo: alternative)
+                                summaryProvider = alternative
+                            }
+                        }
+                    }
+                    if selected == "anthropic" {
+                        SettingsLink { Text("Connect Claude API key") }
+                    } else {
+                        Button("Connect \(providerName(selected))") { connect(selected) }
+                    }
+                }.font(.callout).padding(12).background(.bar)
+            }
         }
     }
 
-    private func notice(_ message: String) -> some View {
-        HStack {
-            Image(systemName: "person.crop.circle.badge.exclamationmark")
-            Text(message)
-            Spacer()
-            SettingsLink { Text("Connect…") }
-        }.font(.callout).padding(12).background(.bar)
+    private func connect(_ provider: String) {
+        Task {
+            if provider == "codex" { await account.connect() }
+            else { await claudeAccount.connect() }
+            queue.applyProviderChoice()
+        }
     }
 
     private func reload() async {
@@ -168,6 +211,7 @@ struct ContentView: View {
         async let chatGPT: Void = account.refresh()
         async let claude: Void = claudeAccount.refresh()
         _ = await (chatGPT, claude)
+        queue.applyProviderChoice()
     }
 
     private func chooseFiles() {

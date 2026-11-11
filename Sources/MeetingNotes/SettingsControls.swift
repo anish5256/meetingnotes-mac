@@ -18,18 +18,18 @@ struct ProviderModelPicker: View {
     }
 
     var body: some View {
-        Picker("Provider", selection: $provider) {
+        Picker("Provider", selection: Binding(get: { provider }, set: { value in
+            provider = value
+            custom = false
+            model = ["claude", "anthropic"].contains(value) ? "claude-opus-5-5" :
+                (value == "proxy" ? "gpt-5" : "")
+        })) {
             if correction { Text("Off").tag("none") }
             Text("ChatGPT (your account)").tag("codex")
             Text("Claude (your account)").tag("claude")
             Text("Claude API key").tag("anthropic")
             Text("Custom OpenAI-compatible endpoint").tag("proxy")
             if !correction { Text("Offline test").tag("fake") }
-        }
-        .onChange(of: provider) { _, value in
-            custom = false
-            model = ["claude", "anthropic"].contains(value) ? "claude-opus-5-5" :
-                (value == "proxy" ? "gpt-5" : "")
         }
         if provider == "proxy" {
             TextField("Model", text: $model)

@@ -67,8 +67,6 @@ Transcription runs **on your Mac**. Only the text is sent to ChatGPT or Claude f
    The installer checks your Mac, installs what's missing (ffmpeg, Python), sets up the transcription engine
    ([voice-memo-transcriber](https://github.com/anish5256/voice-memo-transcriber)) in `~/voice-memo-transcriber`,
    builds the app into **~/Applications/MeetingNotes.app** and opens it.
-   > These repositories are private. If `git clone` asks for a login, run `brew install gh && gh auth login`
-   > (GitHub account with access), then try again.
 4. **Install the AI connection you want to use** (one or both):
    ```bash
    brew install --cask codex         # ChatGPT

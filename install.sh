@@ -34,7 +34,7 @@ step "3/4 Setting up the transcription engine in $TRANSCRIBER_DIR"
 if [ -d "$TRANSCRIBER_DIR/.git" ]; then
     echo "Found an existing copy, keeping it (update it yourself with: git -C \"$TRANSCRIBER_DIR\" pull)."
 else
-    git clone "$TRANSCRIBER_REPO" "$TRANSCRIBER_DIR" || fail "Could not download the transcription engine. If the repo is private, run 'gh auth login' first or ask the owner for access."
+    git clone "$TRANSCRIBER_REPO" "$TRANSCRIBER_DIR" || fail "Could not download the transcription engine. Check your internet connection and try again."
 fi
 cd "$TRANSCRIBER_DIR"
 [ -x venv/bin/python ] || "$PY" -m venv venv

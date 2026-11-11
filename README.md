@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/Apple%20Silicon-M1%20or%20newer-black" alt="Apple Silicon">
   <img src="https://img.shields.io/badge/transcription-100%25%20on--device-2ea44f" alt="On-device transcription">
   <img src="https://img.shields.io/badge/languages-English%20%7C%20Hinglish-orange" alt="English and Hinglish">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
 </p>
 
 <p align="center">
@@ -165,6 +166,11 @@ contract is documented in [`docs/meeting-app-plan.md`](https://github.com/anish5
 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (pyannote segmentation, 3D-Speaker and NeMo TitaNet speaker models) ·
 [python-build-standalone](https://github.com/astral-sh/python-build-standalone) ·
 [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) · SwiftUI. Each keeps its own license.
+
+## License
+
+[MIT](LICENSE). Use it, change it, share it. Contributions welcome.
+Bundled third-party components keep their own licenses (see *Built with*).
 
 ---
 
